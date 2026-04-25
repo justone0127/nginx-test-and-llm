@@ -1,0 +1,80 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: nginx-config
+  namespace: nginx
+data:
+  nginx.conf: |
+    events {
+        worker_connections 1024;
+    }
+
+    http {
+        # [모니터링 튜닝] 로그에 IP 대신 식별자($sent_http_x_which_model)가 찍히도록 설정
+        log_format model_ident_log '$remote_addr - [$time_local] "$request" '
+                                   '$status upstream: $upstream_addr '
+                                   'model: $sent_http_x_which_model';
+
+        access_log /var/log/nginx/access.log model_ident_log;
+
+        resolver 172.30.0.10 valid=1s;
+
+        upstream model_backend {
+            # Model A (Active)
+            server tinyllama1-1b-10-model-a.apps.ocp.d2jz5.sandbox1023.opentlc.com:443 max_fails=1 fail_timeout=5s;
+            # Model B (Standby)
+            server tinyllama1-1b-10-model-b.apps.ocp.d2jz5.sandbox1023.opentlc.com:443 backup;
+        }
+
+        server {
+            listen 8080;
+
+            # 타임아웃 설정 (LLM 생성 시간 고려)
+            proxy_connect_timeout 2s;
+            proxy_send_timeout 60s;
+            proxy_read_timeout 60s;
+
+            location / {
+                proxy_pass https://model_backend;
+
+                # [식별자 부여] 정상 응답 시 MODEL-A 명찰 달기
+                add_header X-Which-Model "MODEL-A" always;
+
+                # 명찰(Host/SNI) 설정
+                proxy_set_header Host tinyllama1-1b-10-model-a.apps.ocp.d2jz5.sandbox1023.opentlc.com;
+                proxy_ssl_name tinyllama1-1b-10-model-a.apps.ocp.d2jz5.sandbox1023.opentlc.com;
+                proxy_ssl_server_name on;
+                proxy_ssl_verify off;
+
+                # [장애 전환 핵심] 503, 504 발생 시 가로채서 @fallback으로 이동
+                proxy_next_upstream error timeout http_503 http_504;
+                proxy_intercept_errors on;
+                error_page 503 502 504 = @fallback;
+
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_buffering off;
+            }
+
+            # Model A 실패 시 실행되는 보조 경로
+            location @fallback {
+                proxy_pass https://tinyllama1-1b-10-model-b.apps.ocp.d2jz5.sandbox1023.opentlc.com:443;
+                
+                # [식별자 부여] 백업 응답 시 MODEL-B 명찰 달기
+                add_header X-Which-Model "MODEL-B" always;
+
+                # Model B 전용 명찰(Host/SNI) 강제 교체
+                proxy_set_header Host tinyllama1-1b-10-model-b.apps.ocp.d2jz5.sandbox1023.opentlc.com;
+                proxy_ssl_name tinyllama1-1b-10-model-b.apps.ocp.d2jz5.sandbox1023.opentlc.com;
+                
+                proxy_ssl_server_name on;
+                proxy_ssl_verify off;
+
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_read_timeout 60s;
+                proxy_buffering off;
+            }
+        }
+    }
+

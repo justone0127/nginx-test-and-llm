@@ -1,0 +1,3 @@
+curl -k -X POST https://nginx-app-nginx.apps.ocp.d2jz5.sandbox1023.opentlc.com/v1/chat/completions \
+-H "Content-Type: application/json" \
+-d "{\"model\": \"tinyllama1-1b-10\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello! What is your name?\"}]}"
