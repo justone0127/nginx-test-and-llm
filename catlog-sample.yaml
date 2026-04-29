@@ -1,0 +1,37 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: model-catalog-sources
+  namespace: rhoai-model-registries
+  labels:
+    app: model-catalog
+    app.kubernetes.io/component: model-catalog
+    app.kubernetes.io/created-by: model-registry-operator
+    app.kubernetes.io/instance: model-catalog
+    app.kubernetes.io/managed-by: model-registry-operator
+    app.kubernetes.io/name: model-catalog
+    app.kubernetes.io/part-of: model-catalog
+    component: model-catalog  
+data:
+  sample-catalog.yaml: |-
+    source: Hugging Face
+    models:
+    - name: openai/gpt-oss-20b
+      description: OpenAI's new gpt-oss models offer fast, low-cost, open-weight reasoning performance, strong tool use, customizability, and enterprise-ready safety for on-premise AI.
+      readme: |-
+        <readme from model card>
+      provider: Open AI
+      logo: data:image/png;base64, <base64 string of image>
+      license: apache-2.0
+      licenseLink: https://www.apache.org/licenses/LICENSE-2.0.txt
+      libraryName: transformers
+      artifacts:
+        - uri: oci://registry.redhat.io/rhelai1/modelcar-gpt-oss-20b:1.5          
+  sources.yaml: |-
+    catalogs:
+    - name: Sample Catalog
+      id: sample_custom_catalog
+      type: yaml
+      enabled: true
+      properties:
+        yamlCatalogPath: sample-catalog.yaml
